@@ -27,7 +27,6 @@ private:
 	int m_height;
 	int m_fps;
 	QFile* m_tmpText;
-	//QByteArray m_errInfo;
 	QString m_err;
 	QStringList m_errList;
 };

@@ -31,9 +31,7 @@ void ScreenRecord::Init()
 {
 	QProcess *listProcess = new QProcess(this);
 	connect(listProcess, &QProcess::readyReadStandardError, [listProcess, this]() {
-		//QString tmp = pro->readAllStandardError();
 		m_err.append(listProcess->readAllStandardError());
-		//qDebug() << tmp;
 	});
 	connect(listProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
 		[this](int exitCode, QProcess::ExitStatus exitStatus) {
@@ -72,7 +70,6 @@ void ScreenRecord::Init()
 	});
 	QStringList listCmdArgs;
 	listCmdArgs << "-list_devices" << "true" << "-f" << "dshow" << "-i" << "dummy";
-	//listProcess->setWorkingDirectory("FFmpeg");
 	listProcess->start("ffmpeg", listCmdArgs);
 }
 
@@ -87,7 +84,6 @@ void ScreenRecord::Start()
 	QStringList args = m_args;
 	QString tmpFileAbsolutePath = "D:\\" + tmpFilePath;
 	args << tmpFileAbsolutePath;
-	//m_recordProcess->setWorkingDirectory("FFmpeg");
 	m_recordProcess->start("ffmpeg", args);
 }
 
@@ -108,7 +104,7 @@ void ScreenRecord::Stop()
 			qDebug() << QStringLiteral("成功合成视频");
 			qDebug() << mergeProcess->readAllStandardError();
 		});
-		//ffmpeg -f concat -safe 0 -i filelist.txt -c copy output.mkv
+		//ffmpeg -f concat -safe 0 -i filelist.txt -c copy output.mp4
 		QStringList args;
 		args << "-f" << "concat";
 		args << "-safe" << "0";
