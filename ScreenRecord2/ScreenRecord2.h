@@ -19,7 +19,7 @@ public:
 
 
 private:
-	QProcess* m_process;
+	QProcess* m_recordProcess;
 	QStringList m_args;
 	QString m_audioDeviceName;
 	QString m_outPath;
@@ -28,5 +28,6 @@ private:
 	int m_fps;
 	QFile* m_tmpText;
 	//QByteArray m_errInfo;
-	QStringList m_errInfo;
+	QString m_err;
+	QStringList m_errList;
 };

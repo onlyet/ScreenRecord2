@@ -12,8 +12,13 @@
 
 ScreenRecord::ScreenRecord(QWidget *parent)
 	: QWidget(parent)
-	, m_process(new QProcess(this))
+	, m_recordProcess(new QProcess(this))
 {
+	connect(m_recordProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+		[this](int exitCode, QProcess::ExitStatus exitStatus) {
+		qDebug() << QStringLiteral("成功录制临时视频");
+	});
+
 	Init();
 	QTimer::singleShot(1000, this, SLOT(Start()));
 	QTimer::singleShot(5000, this, SLOT(Pause()));
@@ -24,49 +29,51 @@ ScreenRecord::ScreenRecord(QWidget *parent)
 
 void ScreenRecord::Init()
 {
-	QProcess *pro = new QProcess(this);
-	connect(pro, &QProcess::readyReadStandardError, [pro, this]() {
-		QString tmp = pro->readAllStandardError();
-		m_errInfo.append(tmp);
-		qDebug() << tmp;
+	QProcess *listProcess = new QProcess(this);
+	connect(listProcess, &QProcess::readyReadStandardError, [listProcess, this]() {
+		//QString tmp = pro->readAllStandardError();
+		m_err.append(listProcess->readAllStandardError());
+		//qDebug() << tmp;
 	});
-	QStringList tmplist;
-	tmplist << "-list_devices" << "true" << "-f" << "dshow" << "-i" << "dummy";
-	pro->start("ffmpeg", tmplist);
-	pro->waitForFinished();
-	//qDebug() << pro->readAllStandardOutput();
-	//qDebug() << pro->readAllStandardError();
-	//pro->readyReadStandardError();
+	connect(listProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+		[this](int exitCode, QProcess::ExitStatus exitStatus) {
+		m_errList = m_err.split("\r\n", QString::SkipEmptyParts);
+		QStringList filter = m_errList.filter(QString::fromLocal8Bit("麦克风"));
+		QString microphone = filter.first();
+		QStringList filter2 = microphone.split("\"", QString::SkipEmptyParts);
+		QStringList filter3 = filter2.filter(QString::fromLocal8Bit("麦克风"));
+		//"麦克风 (High Definition Audio 设备)";
+		m_audioDeviceName = "audio=" + filter3.first();
 
-	m_outPath = "D:/test.mp4";
-	m_width = QApplication::desktop()->screenGeometry().width();
-	m_height = QApplication::desktop()->screenGeometry().height();
-	m_fps = 25;
-	//m_audioDeviceName = "麦克风 (High Definition Audio 设备)";
-	QString audioName = "audio=" + QString::fromLocal8Bit("麦克风 (High Definition Audio 设备)");
+		m_outPath = QString("%1.mp4").arg(QDateTime::currentDateTime().toMSecsSinceEpoch());
+		m_width = QApplication::desktop()->screenGeometry().width();
+		m_height = QApplication::desktop()->screenGeometry().height();
+		m_fps = 25;
+		//QString audioName = "audio=" + QString::fromLocal8Bit("麦克风 (High Definition Audio 设备)");
+		m_args << "-f" << "gdigrab";
+		m_args << "-i" << "desktop";
+		m_args << "-f" << "dshow";
+		m_args << "-i" << m_audioDeviceName;
+		m_args << "-pix_fmt" << "yuv420p";
+		m_args << "-vcodec" << "libx264";
+		m_args << "-acodec" << "aac";
+		m_args << "-s" << QString::number(m_width) + "x" + QString::number(m_height);
+		m_args << "-r" << QString::number(m_fps);
+		m_args << "-q" << "10";
+		m_args << "-ar" << "44100";
+		m_args << "-ac" << "2";
+		m_args << "-tune" << "zerolatency";
+		m_args << "-preset" << "ultrafast";
+		m_args << "-f" << "mp4";
 
-	m_args << "-f" << "gdigrab";
-	m_args << "-i" << "desktop";
-	m_args << "-f" << "dshow";
-	m_args << "-i" << audioName;
-	m_args << "-pix_fmt" << "yuv420p";
-	m_args << "-vcodec" << "libx264";
-	m_args << "-acodec" << "aac";
-	m_args << "-s" << QString::number(m_width) + "x" + QString::number(m_height);
-	m_args << "-r" << QString::number(m_fps);
-	m_args << "-q" << "10";
-	m_args << "-ar" << "44100";
-	m_args << "-ac" << "2";
-	m_args << "-tune" << "zerolatency";
-	m_args << "-preset" << "ultrafast";
-	m_args << "-f" << "mp4";
-
-	m_tmpText = new QFile(QString("D:\\t%1_tmp").arg(QDateTime::currentDateTime().toMSecsSinceEpoch()));
-	if (!m_tmpText->open(QIODevice::ReadWrite | QIODevice::Text))
-		qDebug() << "File open error";
-
-	qDebug() << "text name:" << m_tmpText->fileName();
-	//m_args << m_outPath;
+		m_tmpText = new QFile(QString("D:\\t%1_tmp").arg(QDateTime::currentDateTime().toMSecsSinceEpoch()));
+		if (!m_tmpText->open(QIODevice::ReadWrite | QIODevice::Text))
+			qDebug() << "File open error";
+	});
+	QStringList listCmdArgs;
+	listCmdArgs << "-list_devices" << "true" << "-f" << "dshow" << "-i" << "dummy";
+	//listProcess->setWorkingDirectory("FFmpeg");
+	listProcess->start("ffmpeg", listCmdArgs);
 }
 
 void ScreenRecord::Start()
@@ -80,34 +87,38 @@ void ScreenRecord::Start()
 	QStringList args = m_args;
 	QString tmpFileAbsolutePath = "D:\\" + tmpFilePath;
 	args << tmpFileAbsolutePath;
-	m_process->start("ffmpeg", args);
+	//m_recordProcess->setWorkingDirectory("FFmpeg");
+	m_recordProcess->start("ffmpeg", args);
 }
 
 void ScreenRecord::Pause()
 {
-	m_process->write("q");
+	//暂停录制->生成临时视频
+	m_recordProcess->write("q");
 }
 
 void ScreenRecord::Stop()
 {
-	//qDebug() << m_process->readAllStandardError();
+	//结束录制->合成视频
+	connect(m_recordProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+		[this](int exitCode, QProcess::ExitStatus exitStatus) {
+		QProcess* mergeProcess = new QProcess(this);
+		connect(mergeProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+			[mergeProcess, this](int exitCode, QProcess::ExitStatus exitStatus) {
+			qDebug() << QStringLiteral("成功合成视频");
+			qDebug() << mergeProcess->readAllStandardError();
+		});
+		//ffmpeg -f concat -safe 0 -i filelist.txt -c copy output.mkv
+		QStringList args;
+		args << "-f" << "concat";
+		args << "-safe" << "0";
+		args << "-i" << m_tmpText->fileName();
+		args << "-c" << "copy";
+		args << m_outPath;
+		//合成视频
+		mergeProcess->start("ffmpeg", args);
+	});
 
-	m_process->write("q");
 	m_tmpText->close();
-
-	m_process->waitForFinished();
-
-	QProcess* pro = new QProcess(this);
-	QStringList args;
-	//ffmpeg -f concat -safe 0 -i filelist.txt -c copy output.mkv
-	args << "-f" << "concat";
-	args << "-safe" << "0";	
-	args << "-i" << m_tmpText->fileName();
-	args << "-c" << "copy";
-	args << m_outPath;
-
-	pro->start("ffmpeg", args);
-	pro->waitForFinished();
-	//qDebug() << "stop";
-	//qDebug() << pro->readAllStandardError();
+	m_recordProcess->write("q");
 }
